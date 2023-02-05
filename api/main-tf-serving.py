@@ -5,13 +5,19 @@ from io import BytesIO
 from PIL import Image
 import tensorflow as tf
 
+import requests
+
 app = FastAPI()
 
-# endpoint = 'http://localhost:8501/v1/models/potatoes_model:predict'
+endpoint = 'http://localhost:8502/v1/models/potatoes_model:predict'
 
-MODEL = tf.keras.models.load_model("../saved_models/2")
 
 CLASS_NAMES = ["Early Blight", "Late Blight", "Healthy"]
+
+
+@app.get("/")
+async def root():
+    return {"message": 'Hi 😎'}
 
 
 def read_file_as_image(data) -> np.ndarray:
@@ -27,26 +33,21 @@ async def predict(
     image = read_file_as_image(await file.read())
     img_batch = np.expand_dims(image, axis=0)
 
-    prediction = MODEL.predict(img_batch)
-
-    perdicted_class = CLASS_NAMES[np.argmax(prediction[0])]
-
-    confidence = np.max(prediction[0])
-
-    return {
-        'class': perdicted_class,
-        'confidence': float(confidence),
+    json_data = {
+        "instances": img_batch.tolist()
     }
 
+    response = requests.post(endpoint, json=json_data)
 
-@app.get("/")
-async def root():
-    return {"message": 'Hi 😎'}
+    prediction = np.array(response.json()["predictions"][0])
 
+    predicted_class = CLASS_NAMES[np.argmax(prediction)]
+    confidence = np.max(prediction)
 
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
+    return {
+        "class": predicted_class,
+        "confidence": float(confidence),
+    }
 
 
 if __name__ == '__main__':
